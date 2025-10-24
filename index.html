@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>tom.monster – live from the nervous system</title>
+    <meta name="description" content="A living, breathing homepage powered by biometric chaos">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <canvas id="cosmos"></canvas>
+
+    <div id="overlay">
+        <header>
+            <h1>tom.monster</h1>
+            <p class="tagline">running on wetware</p>
+        </header>
+
+        <div id="biometric-status" class="status-panel">
+            <div class="bpm-display">
+                <span id="heart-icon">♥</span>
+                <span id="bpm-value">--</span>
+                <span class="unit">BPM</span>
+            </div>
+            <button id="connect-sensor" class="pulse-button">
+                connect biometric sensor
+            </button>
+            <div id="connection-status"></div>
+        </div>
+
+        <nav id="mode-selector">
+            <div class="mode-group">
+                <label>reality engine:</label>
+                <button class="mode-btn active" data-mode="cellular">cellular automata</button>
+                <button class="mode-btn" data-mode="nbody">n-body physics</button>
+                <button class="mode-btn" data-mode="particles">particle field</button>
+            </div>
+        </nav>
+
+        <div id="stats" class="stats-panel">
+            <div class="stat">
+                <span class="label">FPS:</span>
+                <span id="fps">60</span>
+            </div>
+            <div class="stat">
+                <span class="label">MODE:</span>
+                <span id="current-mode">cellular automata</span>
+            </div>
+            <div class="stat">
+                <span class="label">DATA SOURCE:</span>
+                <span id="data-source">synthetic</span>
+            </div>
+        </div>
+
+        <footer>
+            <div class="links">
+                <a href="https://picard.cv" target="_blank" class="primary-link">
+                    <span class="icon">📄</span> professional cv
+                </a>
+                <div class="interest-links">
+                    <span class="label">areas of obsession:</span>
+                    <a href="#synth">synthesizers</a>
+                    <a href="#physics">physics</a>
+                    <a href="#rf">RF hacking</a>
+                    <a href="#projects">projects</a>
+                </div>
+            </div>
+            <div class="credits">
+                <p>a self-organizing system maintained by tom pickard</p>
+                <p class="disclaimer">⚠ viewing experience modulated by operator's autonomic nervous system</p>
+            </div>
+        </footer>
+    </div>
+
+    <script type="module" src="js/engine.js"></script>
+</body>
+</html>
