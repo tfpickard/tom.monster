@@ -35,6 +35,34 @@
   line-height: 1.4;
 }
 
+.description {
+  margin: 0.75rem 0 1rem;
+  color: #cfd8dc;
+}
+
+.badgeRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.badge {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.commitMeta {
+  font-size: 0.85rem;
+  color: #b0bec5;
+  margin-top: 0.25rem;
+}
+
 .error {
   color: #ff6b6b;
   text-align: center;

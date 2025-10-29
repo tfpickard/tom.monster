@@ -16,15 +16,11 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from .markov import LanguageStat, MarkovSelector, Repository
-from .scene import build_scene, surrealize_messages
+from .models import CommitInfo
+from .scene import build_scene
+from .story import StoryClient
 
 LOGGER = logging.getLogger(__name__)
-
-
-@dataclass
-class CommitInfo:
-    sha: str
-    message: str
 
 
 @dataclass
@@ -42,7 +38,7 @@ class GitHubClient:
         self._token = token
         self._headers = {
             "Authorization": f"token {token}",
-            "Accept": "application/vnd.github+json",
+            "Accept": "application/vnd.github+json, application/vnd.github.mercy-preview+json",
         }
         self._languages_cache: Dict[str, List[LanguageStat]] = {}
 
@@ -77,21 +73,40 @@ class GitHubClient:
         data = await self._request(url, params)
         commits: List[CommitInfo] = []
         for item in data:
+            sha = item.get("sha", "")
             commits.append(
                 CommitInfo(
-                    sha=item.get("sha", ""),
-                    message=item.get("commit", {}).get("message", ""),
+                    sha=sha,
+                    message=(item.get("commit", {}).get("message", "") or "").strip(),
+                    author_name=(item.get("commit", {}).get("author", {}) or {}).get("name"),
+                    author_login=(item.get("author") or {}).get("login"),
+                    committed_at=(item.get("commit", {}).get("author", {}) or {}).get("date"),
+                    url=item.get("html_url"),
                 )
             )
+            if sha:
+                try:
+                    detail = await self._request(f"https://api.github.com/repos/{repo.full_name}/commits/{sha}")
+                except httpx.HTTPError as exc:  # pragma: no cover - network variability
+                    LOGGER.warning("Failed to fetch commit details", extra={"repo": repo.full_name, "sha": sha, "error": str(exc)})
+                    continue
+
+                stats = detail.get("stats") or {}
+                files_changed = len(detail.get("files") or [])
+                commits[-1].additions = stats.get("additions")
+                commits[-1].deletions = stats.get("deletions")
+                commits[-1].total_changes = stats.get("total")
+                commits[-1].files_changed = files_changed
         return commits
 
 
 class RepositoryManager:
     """Keeps track of repositories and orchestrates scheduled refreshes."""
 
-    def __init__(self, client: GitHubClient, selector: MarkovSelector) -> None:
+    def __init__(self, client: GitHubClient, selector: MarkovSelector, storyteller: StoryClient) -> None:
         self._client = client
         self._selector = selector
+        self._storyteller = storyteller
         self._lock = asyncio.Lock()
         self._repositories: List[Repository] = []
         self._current: Optional[RepositorySnapshot] = None
@@ -120,6 +135,10 @@ class RepositoryManager:
                         forks_count=item.get("forks_count", 0),
                         open_issues_count=item.get("open_issues_count", 0),
                         languages=languages[:5],
+                        description=item.get("description") or "",
+                        topics=item.get("topics") or [],
+                        homepage=item.get("homepage"),
+                        html_url=item.get("html_url", ""),
                     )
                 )
             if not repositories:
@@ -142,7 +161,7 @@ class RepositoryManager:
         commits = await self._client.fetch_commits(base_repo)
         if commits:
             base_repo.latest_commit_sha = commits[0].sha
-        surreal = surrealize_messages(base_repo, [commit.message for commit in commits])
+        surreal = await self._storyteller.compose_story(base_repo, commits)
         scene = build_scene(base_repo)
         self._current = RepositorySnapshot(base_repo, commits, surreal, scene)
 
@@ -154,7 +173,7 @@ class RepositoryManager:
         commits_next = await self._client.fetch_commits(next_repo)
         if commits_next:
             next_repo.latest_commit_sha = commits_next[0].sha
-        surreal_next = surrealize_messages(next_repo, [commit.message for commit in commits_next])
+        surreal_next = await self._storyteller.compose_story(next_repo, commits_next)
         scene_next = build_scene(next_repo)
         self._next = RepositorySnapshot(next_repo, commits_next, surreal_next, scene_next)
 
@@ -187,9 +206,15 @@ def create_app() -> FastAPI:
     if not token:
         raise RuntimeError("GITHUB_TOKEN environment variable is required")
 
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if not openai_key:
+        raise RuntimeError("OPENAI_API_KEY environment variable is required")
+
+    openai_model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
     client = GitHubClient(token)
     selector = MarkovSelector()
-    manager = RepositoryManager(client, selector)
+    storyteller = StoryClient(openai_key, model=openai_model)
+    manager = RepositoryManager(client, selector, storyteller)
 
     app = FastAPI(title="Tom Monster Story API")
     app.add_middleware(
@@ -223,6 +248,10 @@ def create_app() -> FastAPI:
                 "stargazers_count": snapshot.repository.stargazers_count,
                 "forks_count": snapshot.repository.forks_count,
                 "open_issues_count": snapshot.repository.open_issues_count,
+                "description": snapshot.repository.description,
+                "topics": snapshot.repository.topics,
+                "homepage": snapshot.repository.homepage,
+                "html_url": snapshot.repository.html_url,
                 "languages": [
                     {"name": lang.name, "bytes": lang.bytes}
                     for lang in snapshot.repository.languages or []
@@ -232,6 +261,14 @@ def create_app() -> FastAPI:
                 {
                     "sha": commit.sha,
                     "message": commit.message,
+                    "author_name": commit.author_name,
+                    "author_login": commit.author_login,
+                    "committed_at": commit.committed_at,
+                    "additions": commit.additions,
+                    "deletions": commit.deletions,
+                    "total_changes": commit.total_changes,
+                    "files_changed": commit.files_changed,
+                    "url": commit.url,
                 }
                 for commit in snapshot.commits
             ],

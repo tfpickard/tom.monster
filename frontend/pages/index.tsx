@@ -12,9 +12,24 @@ type RepositoryPayload = {
     stargazers_count: number;
     forks_count: number;
     open_issues_count: number;
+    description: string;
+    topics: string[];
+    homepage?: string | null;
+    html_url: string;
     languages: Array<{ name: string; bytes: number }>;
   };
-  commits: Array<{ sha: string; message: string }>;
+  commits: Array<{
+    sha: string;
+    message: string;
+    author_name?: string | null;
+    author_login?: string | null;
+    committed_at?: string | null;
+    additions?: number | null;
+    deletions?: number | null;
+    total_changes?: number | null;
+    files_changed?: number | null;
+    url?: string | null;
+  }>;
   surreal: string[];
   scene: SceneData;
 };
@@ -41,6 +56,46 @@ export default function HomePage() {
     return `${value.toFixed(1)} ${units[unitIndex]}`;
   };
 
+  const formatTimestamp = (timestamp?: string | null) => {
+    if (!timestamp) return null;
+    try {
+      const date = new Date(timestamp);
+      return date.toLocaleString();
+    } catch (err) {
+      return timestamp;
+    }
+  };
+
+  const commitAuthor = (commit: RepositoryPayload['commits'][number]) => {
+    return commit.author_name || commit.author_login || 'Unknown author';
+  };
+
+  const commitStats = (commit: RepositoryPayload['commits'][number]) => {
+    if (
+      commit.total_changes == null &&
+      commit.additions == null &&
+      commit.deletions == null &&
+      commit.files_changed == null
+    ) {
+      return null;
+    }
+
+    const pieces: string[] = [];
+    if (commit.total_changes != null) {
+      pieces.push(`${commit.total_changes} Δ`);
+    } else {
+      const add = commit.additions != null ? `+${commit.additions}` : null;
+      const del = commit.deletions != null ? `-${commit.deletions}` : null;
+      if (add || del) {
+        pieces.push([add, del].filter(Boolean).join(' / '));
+      }
+    }
+    if (commit.files_changed != null) {
+      pieces.push(`${commit.files_changed} files`);
+    }
+    return pieces.join(' • ');
+  };
+
   const fetchState = async () => {
     try {
       const [currentRes, nextRes] = await Promise.all([
@@ -64,7 +119,8 @@ export default function HomePage() {
     return () => clearInterval(interval);
   }, []);
 
-  const surrealStatements = useMemo(() => current?.surreal ?? [], [current]);
+  const storySegments = useMemo(() => current?.surreal ?? [], [current]);
+  const nextStorySegments = useMemo(() => nextRepo?.surreal ?? [], [nextRepo]);
 
   return (
     <div className={styles.container}>
@@ -84,9 +140,19 @@ export default function HomePage() {
               <strong>Stars:</strong> {current.repository.stargazers_count} • <strong>Forks:</strong>{' '}
               {current.repository.forks_count} • <strong>Open issues:</strong> {current.repository.open_issues_count}
             </p>
+            {current.repository.description && (
+              <p className={styles.description}>{current.repository.description}</p>
+            )}
+            {current.repository.topics.length > 0 && (
+              <div className={styles.badgeRow}>
+                {current.repository.topics.map((topic) => (
+                  <span key={topic} className={styles.badge}>{topic}</span>
+                ))}
+              </div>
+            )}
             {current.repository.languages.length > 0 && (
               <div className={styles.commitList}>
-                <h3>Primary Languages</h3>
+                <h3>{current.repository.name} Languages</h3>
                 <ul>
                   {current.repository.languages.map((language) => (
                     <li key={language.name}>
@@ -98,21 +164,32 @@ export default function HomePage() {
             )}
             <StreetScene scene={current.scene} />
             <div className={styles.commitList}>
-              <h3>Surreal Commit Echoes</h3>
+              <h3>{current.repository.name} Storyline</h3>
               <ul>
-                {surrealStatements.map((statement, index) => (
+                {storySegments.map((statement, index) => (
                   <li key={index}>{statement}</li>
                 ))}
               </ul>
             </div>
             <div className={styles.commitList}>
-              <h3>Recent Commits</h3>
+              <h3>{current.repository.name} Activity</h3>
               <ul>
-                {current.commits.map((commit) => (
-                  <li key={commit.sha}>
-                    <code>{commit.sha.slice(0, 7)}</code> — {commit.message}
-                  </li>
-                ))}
+                {current.commits.map((commit) => {
+                  const timestamp = formatTimestamp(commit.committed_at);
+                  const stats = commitStats(commit);
+                  return (
+                    <li key={commit.sha}>
+                      <div>
+                        <code>{commit.sha.slice(0, 7)}</code> — {commit.message}
+                      </div>
+                      <div className={styles.commitMeta}>
+                        {commitAuthor(commit)}
+                        {timestamp && <span> • {timestamp}</span>}
+                        {stats && <span> • {stats}</span>}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </section>
@@ -128,9 +205,19 @@ export default function HomePage() {
               <strong>Stars:</strong> {nextRepo.repository.stargazers_count} • <strong>Forks:</strong>{' '}
               {nextRepo.repository.forks_count} • <strong>Open issues:</strong> {nextRepo.repository.open_issues_count}
             </p>
+            {nextRepo.repository.description && (
+              <p className={styles.description}>{nextRepo.repository.description}</p>
+            )}
+            {nextRepo.repository.topics.length > 0 && (
+              <div className={styles.badgeRow}>
+                {nextRepo.repository.topics.map((topic) => (
+                  <span key={topic} className={styles.badge}>{topic}</span>
+                ))}
+              </div>
+            )}
             {nextRepo.repository.languages.length > 0 && (
               <div className={styles.commitList}>
-                <h3>Primary Languages</h3>
+                <h3>{nextRepo.repository.name} Languages</h3>
                 <ul>
                   {nextRepo.repository.languages.map((language) => (
                     <li key={language.name}>
@@ -141,21 +228,32 @@ export default function HomePage() {
               </div>
             )}
             <div className={styles.commitList}>
-              <h3>Upcoming Commit Visions</h3>
+              <h3>{nextRepo.repository.name} Forecast</h3>
               <ul>
-                {nextRepo.surreal.map((statement, index) => (
+                {nextStorySegments.map((statement, index) => (
                   <li key={index}>{statement}</li>
                 ))}
               </ul>
             </div>
             <div className={styles.commitList}>
-              <h3>Recent Commits</h3>
+              <h3>{nextRepo.repository.name} Activity</h3>
               <ul>
-                {nextRepo.commits.map((commit) => (
-                  <li key={commit.sha}>
-                    <code>{commit.sha.slice(0, 7)}</code> — {commit.message}
-                  </li>
-                ))}
+                {nextRepo.commits.map((commit) => {
+                  const timestamp = formatTimestamp(commit.committed_at);
+                  const stats = commitStats(commit);
+                  return (
+                    <li key={commit.sha}>
+                      <div>
+                        <code>{commit.sha.slice(0, 7)}</code> — {commit.message}
+                      </div>
+                      <div className={styles.commitMeta}>
+                        {commitAuthor(commit)}
+                        {timestamp && <span> • {timestamp}</span>}
+                        {stats && <span> • {stats}</span>}
+                      </div>
+                    </li>
+                  );
+                })}
               </ul>
             </div>
           </section>

@@ -34,6 +34,10 @@ class Repository:
     forks_count: int = 0
     open_issues_count: int = 0
     languages: List[LanguageStat] = field(default_factory=list)
+    description: str = ""
+    topics: List[str] = field(default_factory=list)
+    homepage: str | None = None
+    html_url: str = ""
 
 
 class MarkovSelector:

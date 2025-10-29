@@ -11,7 +11,7 @@ view" of repositories and commits.
 - Filters out forked repositories and periodically samples a random repository.
 - Deterministic Markov-inspired traversal to decide the next repository stop.
 - Background jobs refresh repository data, precompute scenes, and stage the next
-  set of surreal commit statements.
+  set of OpenAI-generated micro stories about recent commits.
 - Procedural scene generator converts repository metadata into buildings, roads,
   and lighting cues for the frontend Three.js visualisation.
 - Next.js frontend polls the API, animates the city scene, and renders surreal
@@ -25,6 +25,7 @@ view" of repositories and commits.
 - Node.js 18+
 - GitHub personal access token with `repo` scope for private repositories (or
   `public_repo` for public data only).
+- OpenAI API key with access to the specified model (defaults to `gpt-4o-mini`).
 
 ### Environment configuration
 
@@ -36,7 +37,9 @@ view" of repositories and commits.
 
 2. Ensure `GITHUB_TOKEN` is set to a personal access token. The backend uses
    this token to list repositories and read recent commits.
-3. Update `NEXT_PUBLIC_BACKEND_URL` if the backend runs on a different host or
+3. Provide `OPENAI_API_KEY` with a key that can call the chosen OpenAI model.
+   Optionally override `OPENAI_MODEL` to experiment with other deployments.
+4. Update `NEXT_PUBLIC_BACKEND_URL` if the backend runs on a different host or
    port. This value is consumed by the Next.js frontend.
 
 ### Backend
@@ -46,7 +49,7 @@ view" of repositories and commits.
    ```bash
    python -m venv .venv
    source .venv/bin/activate
-   pip install fastapi uvicorn[standard] httpx apscheduler python-dotenv
+   pip install fastapi uvicorn[standard] httpx apscheduler openai python-dotenv
    ```
 
 2. Run the API server:
@@ -87,7 +90,8 @@ view" of repositories and commits.
 backend/
   app.py        # FastAPI application with background scheduler
   markov.py     # Deterministic traversal logic for repository selection
-  scene.py      # Procedural scene and surreal text generation utilities
+  scene.py      # Procedural scene generation utilities
+  story.py      # OpenAI-backed surreal narrative composer
 frontend/
   components/   # React components including the Three.js street scene
   pages/        # Next.js pages entrypoint
@@ -100,8 +104,8 @@ frontend/
   `backend/app.py`.
 - Expand `backend/scene.py` with additional geometry or lighting recipes to
   visualise more repository metadata such as stars and issues.
-- Enhance the surreal narrative by adding templates or hooking into the GitHub
-  issues API for richer text sources.
+- Tune the surreal narrative by adjusting `backend/story.py` prompts or swapping
+  in a different OpenAI model via the `OPENAI_MODEL` environment variable.
 
 ## License
 
