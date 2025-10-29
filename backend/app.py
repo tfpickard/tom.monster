@@ -7,7 +7,7 @@ import logging
 import os
 import random
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 import httpx
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -15,7 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from .markov import MarkovSelector, Repository
+from .markov import LanguageStat, MarkovSelector, Repository
 from .scene import build_scene, surrealize_messages
 
 LOGGER = logging.getLogger(__name__)
@@ -44,8 +44,9 @@ class GitHubClient:
             "Authorization": f"token {token}",
             "Accept": "application/vnd.github+json",
         }
+        self._languages_cache: Dict[str, List[LanguageStat]] = {}
 
-    async def _request(self, url: str, params: Optional[Dict] = None) -> List[Dict]:
+    async def _request(self, url: str, params: Optional[Dict] = None) -> Any:
         async with httpx.AsyncClient(timeout=30) as client:
             response = await client.get(url, headers=self._headers, params=params)
             response.raise_for_status()
@@ -55,6 +56,20 @@ class GitHubClient:
         url = "https://api.github.com/user/repos"
         params = {"per_page": 100, "affiliation": "owner"}
         return await self._request(url, params)
+
+    async def fetch_languages(self, repo_full_name: str) -> List[LanguageStat]:
+        if repo_full_name in self._languages_cache:
+            return self._languages_cache[repo_full_name]
+
+        url = f"https://api.github.com/repos/{repo_full_name}/languages"
+        data = await self._request(url)
+        if isinstance(data, dict):
+            sorted_languages = sorted(data.items(), key=lambda item: item[1], reverse=True)
+            languages = [LanguageStat(name=name, bytes=value) for name, value in sorted_languages]
+        else:
+            languages = []
+        self._languages_cache[repo_full_name] = languages
+        return languages
 
     async def fetch_commits(self, repo: Repository, *, per_page: int = 5) -> List[CommitInfo]:
         url = f"https://api.github.com/repos/{repo.full_name}/commits"
@@ -88,16 +103,23 @@ class RepositoryManager:
         async with self._lock:
             LOGGER.info("Refreshing repository cache from GitHub")
             data = await self._client.fetch_repositories()
-            repositories = []
-            for item in data:
-                if item.get("fork"):
-                    continue
+            repositories: List[Repository] = []
+            filtered = [item for item in data if not item.get("fork")]
+            language_results = await asyncio.gather(
+                *(self._client.fetch_languages(item["full_name"]) for item in filtered)
+            )
+
+            for item, languages in zip(filtered, language_results):
                 repositories.append(
                     Repository(
                         name=item["name"],
                         full_name=item["full_name"],
                         default_branch=item.get("default_branch", "main"),
                         latest_commit_sha=item.get("pushed_at", ""),
+                        stargazers_count=item.get("stargazers_count", 0),
+                        forks_count=item.get("forks_count", 0),
+                        open_issues_count=item.get("open_issues_count", 0),
+                        languages=languages[:5],
                     )
                 )
             if not repositories:
@@ -198,6 +220,13 @@ def create_app() -> FastAPI:
                 "full_name": snapshot.repository.full_name,
                 "default_branch": snapshot.repository.default_branch,
                 "latest_commit_sha": snapshot.repository.latest_commit_sha,
+                "stargazers_count": snapshot.repository.stargazers_count,
+                "forks_count": snapshot.repository.forks_count,
+                "open_issues_count": snapshot.repository.open_issues_count,
+                "languages": [
+                    {"name": lang.name, "bytes": lang.bytes}
+                    for lang in snapshot.repository.languages or []
+                ],
             },
             "commits": [
                 {

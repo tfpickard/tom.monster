@@ -10,8 +10,16 @@ producing a pseudo-Markov traversal across the available repositories.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Iterable, List, Optional
+
+
+@dataclass
+class LanguageStat:
+    """Simple language usage metric returned by the GitHub API."""
+
+    name: str
+    bytes: int
 
 
 @dataclass
@@ -22,6 +30,10 @@ class Repository:
     full_name: str
     default_branch: str
     latest_commit_sha: str
+    stargazers_count: int = 0
+    forks_count: int = 0
+    open_issues_count: int = 0
+    languages: List[LanguageStat] = field(default_factory=list)
 
 
 class MarkovSelector:
