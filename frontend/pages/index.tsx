@@ -9,6 +9,10 @@ type RepositoryPayload = {
     full_name: string;
     default_branch: string;
     latest_commit_sha: string;
+    stargazers_count: number;
+    forks_count: number;
+    open_issues_count: number;
+    languages: Array<{ name: string; bytes: number }>;
   };
   commits: Array<{ sha: string; message: string }>;
   surreal: string[];
@@ -24,6 +28,18 @@ export default function HomePage() {
   const [current, setCurrent] = useState<RepositoryPayload | null>(null);
   const [nextRepo, setNextRepo] = useState<RepositoryPayload | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  const formatLanguageBytes = (bytes: number) => {
+    if (bytes < 1024) return `${bytes} B`;
+    const units = ['KB', 'MB', 'GB'];
+    let value = bytes;
+    let unitIndex = -1;
+    while (value >= 1024 && unitIndex < units.length - 1) {
+      value /= 1024;
+      unitIndex += 1;
+    }
+    return `${value.toFixed(1)} ${units[unitIndex]}`;
+  };
 
   const fetchState = async () => {
     try {
@@ -64,6 +80,22 @@ export default function HomePage() {
             <p><strong>Name:</strong> {current.repository.full_name}</p>
             <p><strong>Branch:</strong> {current.repository.default_branch}</p>
             <p><strong>Latest SHA:</strong> {current.repository.latest_commit_sha}</p>
+            <p>
+              <strong>Stars:</strong> {current.repository.stargazers_count} • <strong>Forks:</strong>{' '}
+              {current.repository.forks_count} • <strong>Open issues:</strong> {current.repository.open_issues_count}
+            </p>
+            {current.repository.languages.length > 0 && (
+              <div className={styles.commitList}>
+                <h3>Primary Languages</h3>
+                <ul>
+                  {current.repository.languages.map((language) => (
+                    <li key={language.name}>
+                      {language.name} — {formatLanguageBytes(language.bytes)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <StreetScene scene={current.scene} />
             <div className={styles.commitList}>
               <h3>Surreal Commit Echoes</h3>
@@ -92,6 +124,22 @@ export default function HomePage() {
             <p><strong>Name:</strong> {nextRepo.repository.full_name}</p>
             <p><strong>Branch:</strong> {nextRepo.repository.default_branch}</p>
             <p><strong>Latest SHA:</strong> {nextRepo.repository.latest_commit_sha}</p>
+            <p>
+              <strong>Stars:</strong> {nextRepo.repository.stargazers_count} • <strong>Forks:</strong>{' '}
+              {nextRepo.repository.forks_count} • <strong>Open issues:</strong> {nextRepo.repository.open_issues_count}
+            </p>
+            {nextRepo.repository.languages.length > 0 && (
+              <div className={styles.commitList}>
+                <h3>Primary Languages</h3>
+                <ul>
+                  {nextRepo.repository.languages.map((language) => (
+                    <li key={language.name}>
+                      {language.name} — {formatLanguageBytes(language.bytes)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             <div className={styles.commitList}>
               <h3>Upcoming Commit Visions</h3>
               <ul>
