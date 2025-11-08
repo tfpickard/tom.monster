@@ -20,6 +20,8 @@ interface UseAudioEngineArgs {
 export function useAudioEngine(config: UseAudioEngineArgs) {
   const [isReady, setReady] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState<string | null>(null);
+  const schedulerRef = useRef<Tone.Loop | null>(null);
+  const queuedCellsRef = useRef<Uint8Array | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const mediaDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
@@ -41,27 +43,27 @@ export function useAudioEngine(config: UseAudioEngineArgs) {
   }, [config.tempo]);
 
   const ensureEngine = useCallback(async () => {
-    if (isReady) return;
     await Tone.start();
-    synthsRef.current = {
-      percussive: new Tone.MembraneSynth({
-        octaves: 2,
-        pitchDecay: 0.05,
-      }).toDestination(),
-      plucked: new Tone.PluckSynth().toDestination(),
-      pad: new Tone.PolySynth(Tone.Synth, {
-        oscillator: { type: "sine" },
-        envelope: { attack: 0.2, release: 1.4 },
-      }).toDestination(),
-    };
-    setReady(true);
-  }, [isReady]);
-
-  const triggerNotes = useCallback(
-    async (cells: Uint8Array) => {
-      await ensureEngine();
-      const synths = synthsRef.current;
-      if (!synths) return;
+    if (!synthsRef.current) {
+      synthsRef.current = {
+        percussive: new Tone.MembraneSynth({
+          octaves: 2,
+          pitchDecay: 0.05,
+        }).toDestination(),
+        plucked: new Tone.PluckSynth().toDestination(),
+        pad: new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: "sine" },
+          envelope: { attack: 0.2, release: 1.4 },
+        }).toDestination(),
+      };
+    }
+    schedulerRef.current?.dispose();
+    schedulerRef.current = new Tone.Loop((time) => {
+      const cells = queuedCellsRef.current;
+      if (!cells) {
+        return;
+      }
+      queuedCellsRef.current = null;
       const notes = mapCellsToNotes(cells, {
         lattice: config.lattice,
         width: config.width,
@@ -70,37 +72,53 @@ export function useAudioEngine(config: UseAudioEngineArgs) {
         maxNotes: config.maxNotes,
         strategy: config.strategy,
       });
-      const baseTime = Tone.Transport.seconds + Tone.Transport.blockTime;
       notes.forEach((note, idx) => {
-        const time = baseTime + idx * 0.02;
-        const duration = "8n";
+        const eventTime = time + idx * 0.03;
         const velocity = Math.min(1, Math.max(0.2, note.velocity));
         switch (note.voice) {
           case "percussive":
-            synths.percussive.triggerAttackRelease(
+            synthsRef.current?.percussive.triggerAttackRelease(
               note.frequency,
-              duration,
-              time,
+              "8n",
+              eventTime,
               velocity,
             );
             break;
           case "pad":
-            synths.pad.triggerAttackRelease(note.frequency, "2n", time, velocity);
+            synthsRef.current?.pad.triggerAttackRelease(
+              note.frequency,
+              "2n",
+              eventTime,
+              velocity,
+            );
             break;
           default:
-            synths.plucked.triggerAttackRelease(note.frequency, duration, time, velocity);
+            synthsRef.current?.plucked.triggerAttackRelease(
+              note.frequency,
+              "8n",
+              eventTime,
+              velocity,
+            );
         }
       });
+    }, "16n").start(0);
+    Tone.Transport.start();
+    setReady(true);
+  }, [
+    config.height,
+    config.lattice,
+    config.maxNotes,
+    config.strategy,
+    config.width,
+    scale,
+  ]);
+
+  const triggerNotes = useCallback(
+    async (cells: Uint8Array) => {
+      await ensureEngine();
+      queuedCellsRef.current = cells.slice();
     },
-    [
-      config.height,
-      config.lattice,
-      config.maxNotes,
-      config.strategy,
-      config.width,
-      ensureEngine,
-      scale,
-    ],
+    [ensureEngine],
   );
 
   const startRecording = useCallback(async () => {
