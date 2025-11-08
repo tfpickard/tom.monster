@@ -1,0 +1,20 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 15 14% 9%;
+  --foreground: 210 20% 98%;
+}
+
+body {
+  color: hsl(var(--foreground));
+  background-color: hsl(var(--background));
+  font-feature-settings:
+    "liga" 1,
+    "calt" 1;
+}
+
+canvas {
+  user-select: none;
+}

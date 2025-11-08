@@ -1,0 +1,42 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  anonId    String   @unique
+  createdAt DateTime @default(now())
+  presets   Preset[]
+}
+
+model Preset {
+  id          String   @id @default(cuid())
+  user        User     @relation(fields: [userId], references: [id])
+  userId      String
+  name        String
+  description String?
+  rule        String
+  latticeType String
+  gridWidth   Int
+  gridHeight  Int
+  seedCells   String
+  createdAt   DateTime @default(now())
+  runs        Run[]
+}
+
+model Run {
+  id         String   @id @default(cuid())
+  preset     Preset?  @relation(fields: [presetId], references: [id])
+  presetId   String?
+  params     String
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+  result     String
+  fitness    Int
+  summary    String
+}
